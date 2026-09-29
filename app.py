@@ -1,3 +1,5 @@
+import uuid
+
 import streamlit as st
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_community.document_loaders import WebBaseLoader
@@ -22,7 +24,13 @@ def get_vectorstore_from_url(url):
     document_chunks = text_splitter.split_documents(document)
 
     # create a vectorstore from the chunks
-    vector_store = Chroma.from_documents(document_chunks, OpenAIEmbeddings())
+    # the in-memory Chroma client is shared by the whole process, so each site
+    # gets its own collection instead of adding to the default one
+    vector_store = Chroma.from_documents(
+        document_chunks,
+        OpenAIEmbeddings(),
+        collection_name=uuid.uuid4().hex,
+    )
 
     return vector_store
 
@@ -79,13 +87,13 @@ if website_url is None or website_url == "":
     st.info("Please enter a website URL")
 
 else:
-    # session state
-    if "chat_history" not in st.session_state:
+    # session state, rebuilt whenever a different URL is entered
+    if st.session_state.get("website_url") != website_url:
+        st.session_state.vector_store = get_vectorstore_from_url(website_url)
         st.session_state.chat_history = [
             AIMessage(content="Hello, I am a bot. How can I help you?"),
         ]
-    if "vector_store" not in st.session_state:
-        st.session_state.vector_store = get_vectorstore_from_url(website_url)
+        st.session_state.website_url = website_url
 
     # user input
     user_query = st.chat_input("Type your message here...")
